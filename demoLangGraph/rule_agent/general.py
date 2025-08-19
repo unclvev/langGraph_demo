@@ -81,7 +81,7 @@ def general_router(state: AgentState) -> AgentState:
 
     # 1) chào hỏi → trả lời nhanh (không cần LLM)
     if any(k in txt for k in ["xin chào", "chào", "hello", "hi"]):
-        resp = ("Chào bạn! Mình là trợ lý du lịch 😄 "
+        resp = ("Chào bạn! Mình là trợ lý du lịch "
                 "Bạn muốn tìm hiểu địa điểm hay lên kế hoạch chuyến đi nào không?")
     # 2) ngoài du lịch → từ chối nhẹ
     elif any(k in txt for k in ["chứng khoán","coin","crypto","bất động sản","lập trình","ai model"]):
