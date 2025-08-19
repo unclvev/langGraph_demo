@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "agent": "demoLangGraph.main:app"
+  },
+  "env": "demoLangGraph/.env"
+}
