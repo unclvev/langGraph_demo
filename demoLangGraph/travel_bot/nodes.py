@@ -2,6 +2,7 @@ import re
 from langchain_core.messages import HumanMessage, AIMessage
 from .state import AgentState, normalize_messages, init_state_defaults
 from .catalogs import CATALOGS
+from demoLangGraph.rule_agent.detech_intent import detect_and_extract
 
 # Node khởi tạo
 def init_state(state: AgentState) -> AgentState:
@@ -26,75 +27,10 @@ def detect_intent_and_entities(state: AgentState) -> AgentState:
             return state
 
     last = messages[-1]
-    text_raw = last.content or ""
-    text_lc = text_raw.lower()
+    user_text = (last.content or "").strip()
 
-    # Detect intent
-    intent = "general"
-    if any(k in text_lc for k in ["du lịch", "tour", "lịch trình", "đi chơi"]):
-        intent = "lich_trinh"
-    elif any(k in text_lc for k in ["đặt vé máy bay", "mua vé máy bay", "book flight"]):
-        intent = "dat_ve_may_bay"
-    elif any(k in text_lc for k in ["đặt khách sạn", "booking khách sạn", "nơi ở"]):
-        intent = "dat_khach_san"
-
-    # Extract entities
-    entities: dict = {}
-
-    # Địa điểm (case-insensitive)
-    location_patterns = [
-        r"đi\s+([A-Za-zÀ-ỹĐđ\s]+)",
-        r"([A-Za-zÀ-ỹĐđ\s]+)\s+chơi",
-        r"([A-Za-zÀ-ỹĐđ\s]+)",
-    ]
-    for pat in location_patterns:
-        m = re.findall(pat, text_raw, flags=re.IGNORECASE)
-        if m:
-            cand = m[0].strip()
-            if len(cand) >= 2 and not re.search(r"\d", cand):
-                entities["dia_diem"] = cand
-                break
-
-    # Số người
-    for pat in [r"(\d+)\s*người", r"(\d+)\s*người\s*đi", r"đi\s*cùng\s*(\d+)\s*người"]:
-        mm = re.search(pat, text_lc)
-        if mm:
-            n = int(mm.group(1))
-            if "đi cùng" in text_lc:
-                n += 1
-            entities["so_nguoi"] = n
-            break
-
-    # Thời gian
-    time_pats = [
-        r"ngày\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})",
-        r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})",
-        r"tháng\s*(\d{1,2})",
-        r"ngày\s*(\d{1,2})",
-    ]
-    for pat in time_pats:
-        mm = re.search(pat, text_lc)
-        if mm:
-            if len(mm.groups()) == 3:
-                entities["thoi_gian_di"] = f"{mm.group(1)}/{mm.group(2)}/{mm.group(3)}"
-            else:
-                entities["thoi_gian_di"] = mm.group(1)
-            break
-
-    # Missing
-    missing: list[str] = []
-    if intent != "general":
-        cat = next((c for c in CATALOGS if c["intent"] == intent), None)
-        if cat:
-            present = set(entities.keys())
-            for e in cat["entities"]:
-                name = e["name"]
-                if e.get("required") and name not in present:
-                    missing.append(name); continue
-                if "required_if" in e:
-                    cond = e["required_if"]
-                    if entities.get(cond.get("field")) == cond.get("value") and name not in present:
-                        missing.append(name)
+    # 🔁 Gọi LLM ở rule_agent để detect intent & extract entities
+    intent, entities, missing = detect_and_extract(user_text)
 
     state.update({
         "messages": messages,
@@ -104,6 +40,7 @@ def detect_intent_and_entities(state: AgentState) -> AgentState:
         "current_step": "intent_detected",
     })
     return state
+
 
 # Node trả lời
 def generate_response(state: AgentState) -> AgentState:
@@ -150,4 +87,3 @@ def generate_response(state: AgentState) -> AgentState:
     state["messages"] = messages + [AIMessage(content=resp)]
     state["current_step"] = "responded"
     return state
-
