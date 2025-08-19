@@ -108,12 +108,13 @@ def detect_intent_and_entities(state: AgentState) -> AgentState:
 # Node trả lời
 def generate_response(state: AgentState) -> AgentState:
     messages = normalize_messages(state.get("messages", []))
-    intent = state.get("intent") or "general"
+    intent = (state.get("intent") or "").lower()
     entities = state.get("entities", {})
     missing = state.get("missing_entities", [])
 
+    # General không xử lý ở đây nữa
     if intent == "general":
-        resp = "Tôi có thể giúp bạn tìm hiểu thông tin du lịch, đặt vé, đặt khách sạn và nhiều dịch vụ khác. Bạn cần hỗ trợ gì cụ thể không?"
+        resp = "[BUG] generate_response called with general"  # để debug nếu lạc route
     else:
         if missing:
             q = []
@@ -132,7 +133,8 @@ def generate_response(state: AgentState) -> AgentState:
                 "gia_khach_san": "Ngân sách khách sạn của bạn là bao nhiêu?",
             }
             for name in missing:
-                if name in ASK: q.append(ASK[name])
+                if name in ASK:
+                    q.append(ASK[name])
             resp = f"Tôi hiểu bạn muốn {intent.replace('_', ' ')}. " + " ".join(q[:2])
         else:
             resp = (
@@ -148,3 +150,4 @@ def generate_response(state: AgentState) -> AgentState:
     state["messages"] = messages + [AIMessage(content=resp)]
     state["current_step"] = "responded"
     return state
+

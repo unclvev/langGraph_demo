@@ -10,7 +10,6 @@ class AgentState(TypedDict):
     current_step: Annotated[str, "Current step in the conversation"]
 
 def normalize_messages(raw_msgs) -> list[BaseMessage]:
-    """Chuẩn hoá dict/str từ Studio thành HumanMessage/AIMessage."""
     out: list[BaseMessage] = []
     for m in raw_msgs or []:
         if isinstance(m, BaseMessage):
