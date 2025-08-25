@@ -1,14 +1,38 @@
+# nodes.py
 import re
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from .state import AgentState, normalize_messages, init_state_defaults
 from .catalogs import CATALOGS
 from demoLangGraph.rule_agent.detech_intent import detect_and_extract
+from demoLangGraph.memory.ShortTerm import ShortTermMemory            # <= NEW
+
+def _safe_last(messages: list[BaseMessage], typ):
+    for m in reversed(messages):
+        if isinstance(m, typ):
+            return m
+    return None
+
+def _get_stm(state: AgentState) -> ShortTermMemory:
+    user_id = state.get("user_id") or state.get("session_id") or "studio"
+    return ShortTermMemory(user_id=user_id)
 
 # Node khởi tạo
 def init_state(state: AgentState) -> AgentState:
-    return init_state_defaults(state)
+    print("day la :", state)
+    state = init_state_defaults(state)
+    # Nạp context gần từ STM (để dùng cho prompt detect)
+    try:
+        stm = _get_stm(state)
+        state["stm_context"] = stm.get_conversation_context(limit=5) or ""
+        # Gia hạn TTL nhẹ để tránh rơi context giữa phiên
+        stm.extend_ttl(extend_seconds=180)
+    except Exception as e:
+        # Không chặn flow nếu Redis lỗi
+        state["stm_context"] = ""
+        print("[STM] init_state error:", e)
+    return state
 
-# Node detect intent + entities
+# Node detect intent + entities (dùng STM context)
 def detect_intent_and_entities(state: AgentState) -> AgentState:
     messages = normalize_messages(state.get("messages", []))
 
@@ -29,8 +53,15 @@ def detect_intent_and_entities(state: AgentState) -> AgentState:
     last = messages[-1]
     user_text = (last.content or "").strip()
 
+    # Ghép STM context (nếu có) để detect mạnh hơn
+    stm_ctx = state.get("stm_context") or ""
+    detect_text = (
+        f"{user_text}"
+        + (f"\n\n[Ngữ cảnh gần]\n{stm_ctx}" if stm_ctx else "")
+    )
+
     # 🔁 Gọi LLM ở rule_agent để detect intent & extract entities
-    intent, entities, missing = detect_and_extract(user_text)
+    intent, entities, missing = detect_and_extract(detect_text)
 
     state.update({
         "messages": messages,
@@ -41,7 +72,6 @@ def detect_intent_and_entities(state: AgentState) -> AgentState:
     })
     return state
 
-
 # Node trả lời
 def generate_response(state: AgentState) -> AgentState:
     messages = normalize_messages(state.get("messages", []))
@@ -49,9 +79,8 @@ def generate_response(state: AgentState) -> AgentState:
     entities = state.get("entities", {})
     missing = state.get("missing_entities", [])
 
-    # General không xử lý ở đây nữa
     if intent == "general":
-        resp = "[BUG] generate_response called with general"  # để debug nếu lạc route
+        resp = "[BUG] generate_response called with general"
     else:
         if missing:
             q = []
@@ -86,4 +115,19 @@ def generate_response(state: AgentState) -> AgentState:
 
     state["messages"] = messages + [AIMessage(content=resp)]
     state["current_step"] = "responded"
+    return state
+
+# NEW: Node ghi STM cho mọi nhánh
+def write_short_term(state: AgentState) -> AgentState:
+    try:
+        stm = _get_stm(state)
+        msgs = normalize_messages(state.get("messages", []))
+        last_user = _safe_last(msgs, HumanMessage)
+        last_ai   = _safe_last(msgs, AIMessage)
+        if last_user and last_ai:
+            stm.add_turn(user_input=last_user.content or "",
+                         bot_response=last_ai.content or "",
+                         ttl=300)
+    except Exception as e:
+        print("[STM] write_short_term error:", e)
     return state

@@ -4,3 +4,6 @@ langchain-google-genai
 google-generativeai
 python-dotenv
 langgraph-cli[inmem]
+redis
+booktype
+psutil
