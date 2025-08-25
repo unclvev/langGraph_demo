@@ -1,7 +1,7 @@
-# travel_bot/graph.py
+# graph.py
 from langgraph.graph import StateGraph, START, END
 from .state import AgentState
-from .nodes import init_state, detect_intent_and_entities, generate_response
+from .nodes import init_state, detect_intent_and_entities, generate_response, write_short_term
 from ..rule_agent.general import general_router
 
 def create_travel_bot():
@@ -10,6 +10,7 @@ def create_travel_bot():
     g.add_node("detect_intent", detect_intent_and_entities)
     g.add_node("general_router", general_router)
     g.add_node("generate_response", generate_response)
+    g.add_node("write_short_term", write_short_term)
 
     g.add_edge(START, "init_state")
     g.add_edge("init_state", "detect_intent")
@@ -25,6 +26,9 @@ def create_travel_bot():
         ["general_router", "generate_response"],
     )
 
-    g.add_edge("general_router", END)
-    g.add_edge("generate_response", END)
+    # Trước khi END, luôn ghi vào STM
+    g.add_edge("general_router", "write_short_term")
+    g.add_edge("generate_response", "write_short_term")
+    g.add_edge("write_short_term", END)
+
     return g.compile()

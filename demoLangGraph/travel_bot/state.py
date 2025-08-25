@@ -30,8 +30,10 @@ def normalize_messages(raw_msgs) -> list[BaseMessage]:
 def init_state_defaults(state: AgentState) -> AgentState:
     state.setdefault("messages", [])
     state.setdefault("session_id", "studio")
+    state.setdefault("user_id", "studio")
     state.setdefault("intent", "")
     state.setdefault("entities", {})
     state.setdefault("missing_entities", [])
     state.setdefault("current_step", "")
+    state.setdefault("stm_context", "")
     return state
