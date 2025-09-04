@@ -12,11 +12,9 @@ import psutil
 print("ROOT path:", ROOT)
 print("GOOGLE_API_KEY?", bool(os.getenv("GOOGLE_API_KEY")))
 print("GEMINI_MODEL?", os.getenv("GEMINI_MODEL"))
-# === 1) Nhập graph như main.py của bạn ===
-# main.py đang dùng: from demoLangGraph.travel_bot.graph import create_travel_bot
-from demoLangGraph.travel_bot.graph import create_travel_bot  # giữ nguyên như project của bạn
 
-# === 2) (Tuỳ chọn) MOCK LLM để không tốn tiền ===
+from demoLangGraph.travel_bot.graph import create_travel_bot 
+
 def enable_mock_llm():
     try:
         import demoLangGraph.rule_agent.detech_intent as di
@@ -39,7 +37,6 @@ def enable_mock_llm():
     if gr and hasattr(gr, "_llm"):
         gr._llm = lambda: FakeLLMText()
 
-# === 3) Tạo payload đa dạng để tránh cache vô tình ===
 TXT = [
     "du lịch đà nẵng 3 ngày 2 đêm cho 4 người",
     "đặt vé máy bay hà nội đi sài gòn 1 chiều",
@@ -91,13 +88,11 @@ class ResourceSampler(threading.Thread):
             "net_MB_per_s": {"sent_avg": round(sum(snt)/len(snt),2), "recv_avg": round(sum(rcv)/len(rcv),2)},
         }
 
-# === 5) 1 request E2E ===
 async def one_call(app, payload):
     t0 = time.perf_counter()
     await app.ainvoke(payload)
     return (time.perf_counter() - t0) * 1000.0  # ms
 
-# === 6) Chạy benchmark ===
 async def run_bench(total: int, concurrency: int, warmup: int):
     app = create_travel_bot()
     sem = asyncio.Semaphore(concurrency)
@@ -117,7 +112,6 @@ async def run_bench(total: int, concurrency: int, warmup: int):
             finally:
                 inflight -= 1
 
-    # warmup
     if warmup > 0:
         await asyncio.gather(*(worker(-i) for i in range(warmup)))
         latencies.clear(); errors = 0; peak_inflight = 0
@@ -149,7 +143,6 @@ async def run_bench(total: int, concurrency: int, warmup: int):
         "concurrent_inflight_peak": peak_inflight
     }
 
-# === 7) CLI ===
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--total", type=int, default=300)
