@@ -1,15 +1,10 @@
-# demoLangGraph/rule_agent/intent.py
-import os, re, json
+print("[USING NODES]", __file__)
+import re, json
 from typing import Dict, List, Tuple
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
+from demoLangGraph.rule_agent.llm_client import call_llm,call_llm_rule_user
 from demoLangGraph.travel_bot.catalogs import CATALOGS
 
-def _llm():
-    model = os.getenv("INTENT_MODEL", os.getenv("TRAVEL_BOT_MODEL", "gemini-1.5-flash"))
-    return ChatGoogleGenerativeAI(model=model, temperature=0.2)
-
-# 1) NHÉT RULE của bạn vào một biến chuỗi thường (giữ nguyên mọi { } )
+# RULE giữ nguyên như cũ
 NLU_RULE = r"""Bạn là một hệ thống phân tích ngôn ngữ tự nhiên (NLU), **không phải một chatbot**.
 
 ❌ Tuyệt đối KHÔNG được trả lời người dùng dưới dạng hội thoại.
@@ -20,7 +15,7 @@ NLU_RULE = r"""Bạn là một hệ thống phân tích ngôn ngữ tự nhiên 
 - Trích xuất các `entities`.
 - Liệt kê các `missing_entities` còn thiếu.
 - Chỉ trả và json theo format bên dưới.
-**1. Phân loại intent:**
+**1. Phân loại intent:**                                                                       
 - Giới thiệu người dùng các thông tin liên quan đến địa điểm, văn hóa, các câu hỏi chung chung `"general"`.
 - Nếu câu hỏi thuộc các dạng tra cứu thông tin địa điểm, hỏi mùa đẹp, review, đánh giá, hỏi thời tiết, hỏi "có nên đi không", "gợi ý cho tôi địa điểm ...", hỏi về đặc điểm một nơi nào hoặc các câu hỏi chung như: "chi phí bao nhiêu", "tốn kém không", "có đắt không" mà chưa có ý định đặt tour/lịch trình đó... thì intent là `"general"`.
 - Nếu câu hỏi liên quan **lịch trình đi chơi, tour, khách sạn, nghỉ dưỡng, chi phí...** thì intent là `"lich_trinh"`.
@@ -195,12 +190,6 @@ Chỉ khi người dùng xác nhận lựa chọn địa điểm hoặc hành đ
 
 Tuyệt đối không được trả lời người đùng chỉ trả ra output giống trên."""
 
-# 2) Template chỉ có 2 biến 'rules' và 'user_utterance'
-_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", "{rules}"),
-    ("human", "{user_utterance}"),
-])
-
 def _compute_missing(intent: str, entities: Dict) -> List[str]:
     if not intent or intent == "general":
         return []
@@ -211,17 +200,14 @@ def _compute_missing(intent: str, entities: Dict) -> List[str]:
             for e in c["entities"]:
                 name = e["name"]
                 if e.get("required") and name not in present:
-                    missing.append(name); continue
+                    missing.append(name)
+                    continue
                 if "required_if" in e:
                     cond = e["required_if"]
                     if entities.get(cond.get("field")) == cond.get("value") and name not in present:
                         missing.append(name)
             break
     return missing
-
-def _invoke_llm(user_text: str) -> str:
-    msg = _PROMPT.invoke({"rules": NLU_RULE, "user_utterance": user_text})
-    return _llm().invoke(msg).content
 
 def _parse_json_only(raw: str) -> dict:
     m = re.search(r"\{.*\}", raw, flags=re.DOTALL)
@@ -231,27 +217,24 @@ def _parse_json_only(raw: str) -> dict:
         data = json.loads(m.group(0))
     except Exception:
         return {"intent": "general", "entities": {}, "missing_entities": []}
-    # Chuẩn hoá tên key
     if "missing" in data and "missing_entities" not in data:
         data["missing_entities"] = data.pop("missing")
     data.setdefault("missing_entities", [])
     data.setdefault("entities", {})
     return data
 
-def detect_and_extract(user_text: str) -> Tuple[str, Dict, List[str]]:
-    raw = _invoke_llm(user_text)
+# Hàm chính detect
+async def detect_and_extract(user_text: str) -> Tuple[str, Dict, List[str]]:
+    raw = await call_llm_rule_user(NLU_RULE, user_text)
     data = _parse_json_only(raw)
 
     intent = (data.get("intent") or "general").strip().lower()
     entities = data.get("entities") or {}
-    # Tính thiếu chuẩn theo CATALOGS (đề phòng LLM sót)
-    missing = _compute_missing(intent, entities)
 
-    # Hợp nhất với missing do LLM trả về (nếu có)
+    missing = _compute_missing(intent, entities)
     llm_missing = data.get("missing_entities") or []
     missing = list(set(missing) | set(llm_missing))
 
-    # Một số chuẩn hoá nho nhỏ theo rule:
     if intent == "dat_ve_may_bay":
         v = str(entities.get("khu_hoi", "")).strip().lower()
         if not v:
