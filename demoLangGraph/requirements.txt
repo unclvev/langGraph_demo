@@ -7,3 +7,4 @@ langgraph-cli[inmem]
 redis
 booktype
 psutil
+aiohttp

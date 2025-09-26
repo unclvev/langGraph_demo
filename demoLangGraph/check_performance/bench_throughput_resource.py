@@ -13,6 +13,7 @@ print("ROOT path:", ROOT)
 print("GOOGLE_API_KEY?", bool(os.getenv("GOOGLE_API_KEY")))
 print("GEMINI_MODEL?", os.getenv("GEMINI_MODEL"))
 
+
 from demoLangGraph.travel_bot.graph import create_travel_bot 
 
 def enable_mock_llm():
@@ -46,7 +47,6 @@ TXT = [
 def make_payload(i: int):
     return {"messages": [{"type": "human", "content": random.choice(TXT)}]}
 
-# === 4) Sampler resource mỗi giây ===
 class ResourceSampler(threading.Thread):
     def __init__(self, interval=1.0):
         super().__init__(daemon=True)

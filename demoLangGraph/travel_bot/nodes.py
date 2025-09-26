@@ -1,10 +1,10 @@
-# nodes.py
-import re
+print("[USING NODES]", __file__)
+
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from .state import AgentState, normalize_messages, init_state_defaults
 from .catalogs import CATALOGS
 from demoLangGraph.rule_agent.detech_intent import detect_and_extract
-from demoLangGraph.memory.ShortTerm import ShortTermMemory            # <= NEW
+from demoLangGraph.memory.ShortTerm import ShortTermMemory
 
 def _safe_last(messages: list[BaseMessage], typ):
     for m in reversed(messages):
@@ -25,7 +25,7 @@ def init_state(state: AgentState) -> AgentState:
         stm = _get_stm(state)
         state["stm_context"] = stm.get_conversation_context(limit=5) or ""
         # Gia hạn TTL nhẹ để tránh rơi context giữa phiên
-        stm.extend_ttl(extend_seconds=180)
+        # stm.extend_ttl(extend_seconds=180)
     except Exception as e:
         # Không chặn flow nếu Redis lỗi
         state["stm_context"] = ""
@@ -33,7 +33,7 @@ def init_state(state: AgentState) -> AgentState:
     return state
 
 # Node detect intent + entities (dùng STM context)
-def detect_intent_and_entities(state: AgentState) -> AgentState:
+async def detect_intent_and_entities(state: AgentState) -> AgentState:
     messages = normalize_messages(state.get("messages", []))
 
     if not messages:
@@ -53,15 +53,10 @@ def detect_intent_and_entities(state: AgentState) -> AgentState:
     last = messages[-1]
     user_text = (last.content or "").strip()
 
-    # Ghép STM context (nếu có) để detect mạnh hơn
     stm_ctx = state.get("stm_context") or ""
-    detect_text = (
-        f"{user_text}"
-        + (f"\n\n[Ngữ cảnh gần]\n{stm_ctx}" if stm_ctx else "")
-    )
+    detect_text = f"{user_text}" + (f"\n\n[Ngữ cảnh gần]\n{stm_ctx}" if stm_ctx else "")
 
-    # 🔁 Gọi LLM ở rule_agent để detect intent & extract entities
-    intent, entities, missing = detect_and_extract(detect_text)
+    intent, entities, missing = await detect_and_extract(detect_text)
 
     state.update({
         "messages": messages,
@@ -117,7 +112,20 @@ def generate_response(state: AgentState) -> AgentState:
     state["current_step"] = "responded"
     return state
 
-# NEW: Node ghi STM cho mọi nhánh
+def flight_agent(state: AgentState) -> AgentState:
+    # Đảm bảo messages là list hợp lệ
+    messages = normalize_messages(state.get("messages", []))
+    messages.append(AIMessage(content="Bạn đang yêu cầu đặt vé máy bay. Đây là flight_agent."))
+    state["messages"] = messages
+    return state
+
+def hotel_agent(state: AgentState) -> AgentState:
+    # Đảm bảo messages là list hợp lệ
+    messages = normalize_messages(state.get("messages", []))
+    messages.append(AIMessage(content="Bạn đang yêu cầu đặt khách sạn. Đây là hotel_agent."))
+    state["messages"] = messages
+    return state
+
 def write_short_term(state: AgentState) -> AgentState:
     try:
         stm = _get_stm(state)
