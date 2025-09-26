@@ -13,7 +13,8 @@ print("ROOT path:", ROOT)
 print("GOOGLE_API_KEY?", bool(os.getenv("GOOGLE_API_KEY")))
 print("GEMINI_MODEL?", os.getenv("GEMINI_MODEL"))
 
-from demoLangGraph.travel_bot.graph import create_travel_bot  # giữ nguyên như project của bạn
+
+from demoLangGraph.travel_bot.graph import create_travel_bot 
 
 def enable_mock_llm():
     try:
